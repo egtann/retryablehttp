@@ -6,8 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"sync"
-
-	"github.com/pkg/errors"
+	"time"
 )
 
 // Client does auto-retries. If passed a logger, it logs the start and end of
@@ -23,7 +22,7 @@ type Logger interface {
 	Printf(string, ...interface{})
 }
 
-func New(client *http.Client) *Client {
+func NewClient(client *http.Client) *Client {
 	return &Client{c: client}
 }
 
@@ -53,22 +52,30 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	var rsp *http.Response
-	byt, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		return nil, err
+	var (
+		rsp *http.Response
+		byt []byte
+		err error
+	)
+	if req.Body != nil {
+		byt, err = ioutil.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
 	}
 	ctx := req.Context()
 	for i := 0; i < c.retries; i++ {
 		rsp, err = c.retry(ctx, req, byt)
 		if err != nil {
-			return nil, errors.Wrap(err, "retry")
+			time.Sleep(time.Second * time.Duration(i+1))
+			continue
 		}
 		if retryable(rsp.StatusCode) {
 			rsp.Body.Close()
+			time.Sleep(time.Second * time.Duration(i+1))
 			continue
 		}
-		return rsp, err
+		return rsp, nil
 	}
 	return rsp, err
 }
