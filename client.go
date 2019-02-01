@@ -5,6 +5,7 @@ import (
 	"context"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 )
@@ -99,8 +100,17 @@ func (c *Client) retry(
 
 func (c *Client) do(req *http.Request) (*http.Response, error) {
 	if c.log != nil {
-		c.log.Printf("start: http: %s %s", req.Method, req.URL.String())
-		defer c.log.Printf("end: http: %s %s", req.Method, req.URL.String())
+		// Remove basic auth info before logging
+		ul, err := url.Parse(req.URL.String())
+		if err != nil {
+			return nil, err
+		}
+		ul.User = nil
+		urlStr := ul.String()
+
+		// Log start and end times for observability
+		c.log.Printf("start: http: %s %s", req.Method, urlStr)
+		defer c.log.Printf("end: http: %s %s", req.Method, urlStr)
 	}
 	return c.c.Do(req)
 }
