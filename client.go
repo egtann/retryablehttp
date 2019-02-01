@@ -64,7 +64,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		}
 	}
 	ctx := req.Context()
-	for i := 0; i < c.retries; i++ {
+	for i := 0; i < c.retries-1; i++ {
 		rsp, err = c.retry(ctx, req, byt)
 		if err != nil {
 			time.Sleep(time.Second * time.Duration(i+1))
@@ -77,7 +77,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		}
 		return rsp, nil
 	}
-	return rsp, err
+	return c.retry(ctx, req, byt)
 }
 
 func (c *Client) retry(
