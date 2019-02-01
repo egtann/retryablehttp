@@ -47,7 +47,7 @@ func (c *Client) WithRetries(r int) *Client {
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	if c.retries == 0 {
-		return c.c.Do(req)
+		return c.do(req)
 	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -63,9 +63,10 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 			return nil, err
 		}
 	}
+	header := req.Header
 	ctx := req.Context()
 	for i := 0; i < c.retries-1; i++ {
-		rsp, err = c.retry(ctx, req, byt)
+		rsp, err = c.retry(ctx, req, header, byt)
 		if err != nil {
 			time.Sleep(time.Second * time.Duration(i+1))
 			continue
@@ -77,18 +78,29 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		}
 		return rsp, nil
 	}
-	return c.retry(ctx, req, byt)
+	return c.retry(ctx, req, header, byt)
 }
 
 func (c *Client) retry(
 	ctx context.Context,
 	req *http.Request,
+	header http.Header,
 	byt []byte,
 ) (*http.Response, error) {
 	rdr := bytes.NewReader(byt)
 	req, err := http.NewRequest(req.Method, req.URL.String(), rdr)
 	if err != nil {
 		return nil, err
+	}
+	req = req.WithContext(ctx)
+	req.Header = header
+	return c.do(req)
+}
+
+func (c *Client) do(req *http.Request) (*http.Response, error) {
+	if c.log != nil {
+		c.log.Printf("start: http: %s %s", req.Method, req.URL.String())
+		defer c.log.Printf("end: http: %s %s", req.Method, req.URL.String())
 	}
 	return c.c.Do(req)
 }
