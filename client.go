@@ -116,7 +116,7 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 }
 
 func retryable(statusCode int) bool {
-	if statusCode <= 400 && statusCode < 500 {
+	if statusCode >= 400 && statusCode < 500 {
 		return true
 	}
 
