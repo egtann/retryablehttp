@@ -106,19 +106,24 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	for i := 0; i < c.retries-1; i++ {
 		rsp, err = c.retry(ctx, req, header, byt)
 		if err != nil {
-			c.log.Printf("failed with err: retry %d: %s %s", i,
-				req.Method, safeURL)
+			if c.log != nil {
+				c.log.Printf("failed with err: retry %d: %s %s", i,
+					req.Method, safeURL)
+			}
 			time.Sleep(time.Second * time.Duration(i+1))
 			continue
 		}
 		if c.shouldRetry(rsp) {
-			c.log.Printf("failed with code: retry %d: %s %s", i,
-				req.Method, safeURL)
-			byt, err := ioutil.ReadAll(io.LimitReader(rsp.Body, 1024*64))
-			if err != nil {
-				c.log.Printf("failed to read resp body: %s", err)
-			} else {
-				c.log.Printf("response body: %s", string(byt))
+			if c.log != nil {
+				c.log.Printf("failed with code: retry %d: %s %s",
+					i, req.Method, safeURL)
+				lr := io.LimitReader(rsp.Body, 1024*64)
+				byt, err := ioutil.ReadAll(lr)
+				if err != nil {
+					c.log.Printf("failed to read resp body: %s", err)
+				} else {
+					c.log.Printf("response body: %s", string(byt))
+				}
 			}
 			rsp.Body.Close()
 			time.Sleep(time.Second * time.Duration(i+1))
