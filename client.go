@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -99,15 +100,26 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 			return nil, fmt.Errorf("read body: %s", err.Error())
 		}
 	}
+	safeURL := removeURLAuth(req.URL.String())
 	header := req.Header
 	ctx := req.Context()
 	for i := 0; i < c.retries-1; i++ {
 		rsp, err = c.retry(ctx, req, header, byt)
 		if err != nil {
+			c.log.Printf("failed with err: retry %d: %s %s", i,
+				req.Method, safeURL)
 			time.Sleep(time.Second * time.Duration(i+1))
 			continue
 		}
 		if c.shouldRetry(rsp) {
+			c.log.Printf("failed with code: retry %d: %s %s", i,
+				req.Method, safeURL)
+			byt, err := ioutil.ReadAll(io.LimitReader(rsp.Body, 1024*64))
+			if err != nil {
+				c.log.Printf("failed to read resp body: %s", err)
+			} else {
+				c.log.Printf("response body: %s", string(byt))
+			}
 			rsp.Body.Close()
 			time.Sleep(time.Second * time.Duration(i+1))
 			continue
@@ -133,19 +145,22 @@ func (c *Client) retry(
 	return c.do(req)
 }
 
+// RemoveURLAuth details before logging.
+func removeURLAuth(s string) string {
+	ul, err := url.Parse(s)
+	if err != nil {
+		return ""
+	}
+	ul.User = nil
+	return ul.String()
+}
+
 func (c *Client) do(req *http.Request) (*http.Response, error) {
 	if c.log != nil {
-		// Remove basic auth info before logging
-		ul, err := url.Parse(req.URL.String())
-		if err != nil {
-			return nil, fmt.Errorf("parse url: %s", err.Error())
-		}
-		ul.User = nil
-		urlStr := ul.String()
-
 		// Log start and end times for observability
-		c.log.Printf("start: http: %s %s", req.Method, urlStr)
-		defer c.log.Printf("end: http: %s %s", req.Method, urlStr)
+		safeURL := removeURLAuth(req.URL.String())
+		c.log.Printf("start: http: %s %s", req.Method, safeURL)
+		defer c.log.Printf("end: http: %s %s", req.Method, safeURL)
 	}
 	if c.limiter != nil {
 		if err := c.limiter.Wait(req.Context()); err != nil {
