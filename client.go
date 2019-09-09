@@ -17,7 +17,7 @@ import (
 // Client does auto-retries. If passed a logger, it logs the start and end of
 // requests for observability.
 type Client struct {
-	c           *http.Client
+	c           HTTPClient
 	shouldRetry ShouldRetryFn
 	limiter     *rate.Limiter
 	retries     int
@@ -25,11 +25,15 @@ type Client struct {
 	mu          sync.RWMutex
 }
 
+type HTTPClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
 type Logger interface {
 	Printf(string, ...interface{})
 }
 
-func NewClient(client *http.Client) *Client {
+func NewClient(client HTTPClient) *Client {
 	return &Client{c: client, shouldRetry: defaultRetrier}
 }
 
